@@ -2,13 +2,18 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
 	"io"
 	"log"
 	"net"
-	// "net/http"
-	// "net/url"
+	"strings"
 	"sync"
+)
+
+const (
+	username = "your_username"
+	password = "your_password"
 )
 
 func handleHTTPSConnection(clientConn net.Conn) {
@@ -22,12 +27,34 @@ func handleHTTPSConnection(clientConn net.Conn) {
 		return
 	}
 
-	// 解析请求行
-	requestLine := string(buffer[:n])
+	// 解析请求行和头部
+	request := string(buffer[:n])
+	lines := strings.Split(request, "\r\n")
+	if len(lines) < 1 {
+		log.Println("Invalid request")
+		return
+	}
+
+	requestLine := lines[0]
 	var host string
 	_, err = fmt.Sscanf(requestLine, "CONNECT %s HTTP/1.1", &host)
 	if err != nil {
 		log.Println("Error parsing CONNECT request:", err)
+		return
+	}
+
+	// 验证 Proxy-Authorization 头部
+	authHeader := ""
+	for _, line := range lines {
+		if strings.HasPrefix(line, "Proxy-Authorization:") {
+			authHeader = strings.TrimSpace(line[len("Proxy-Authorization:"):])
+			break
+		}
+	}
+
+	if !isValidAuth(authHeader) {
+		clientConn.Write([]byte("HTTP/1.1 407 Proxy Authentication Required\r\nProxy-Authenticate: Basic realm=\"Access to the proxy\"\r\n\r\n"))
+		log.Println("Invalid Proxy-Authorization header")
 		return
 	}
 
@@ -63,6 +90,22 @@ func handleHTTPSConnection(clientConn net.Conn) {
 	wg.Wait()
 }
 
+func isValidAuth(authHeader string) bool {
+	if !strings.HasPrefix(authHeader, "Basic ") {
+		return false
+	}
+
+	encodedCredentials := strings.TrimPrefix(authHeader, "Basic ")
+	decodedCredentials, err := base64.StdEncoding.DecodeString(encodedCredentials)
+	if err != nil {
+		return false
+	}
+
+	credentials := string(decodedCredentials)
+	expectedCredentials := fmt.Sprintf("%s:%s", username, password)
+	return credentials == expectedCredentials
+}
+
 func main() {
 	// 创建一个自签名的 TLS 证书
 	cert, err := tls.LoadX509KeyPair("server.crt", "server.key")
@@ -74,13 +117,13 @@ func main() {
 	tlsConfig := &tls.Config{Certificates: []tls.Certificate{cert}}
 
 	// 创建一个监听器
-	listener, err := tls.Listen("tcp", ":9900", tlsConfig)
+	listener, err := tls.Listen("tcp", ":20001", tlsConfig)
 	if err != nil {
 		log.Fatal("Error creating listener:", err)
 	}
 	defer listener.Close()
 
-	log.Println("HTTPS proxy server is running on port 9900")
+	log.Println("HTTPS proxy server is running on port 20001")
 
 	for {
 		// 接受客户端连接
