@@ -1,0 +1,15 @@
+# docker-compose.yml
+
+services:
+  https-proxy-dev:
+    build:
+      context: ./
+      dockerfile: Dockerfile.dev
+    volumes:
+        - ./:/workspace
+        - https-proxy-dev-vsc:/root/.vscode-server
+    stdin_open: true
+    tty: true
+
+volumes:
+  https-proxy-dev-vsc:
