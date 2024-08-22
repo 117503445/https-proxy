@@ -9,7 +9,7 @@
 
 ```mermaid
 graph LR
-    A[客户端] -->|HTTPS| B[代理服务器]
+    A[客户端] -->|公网| B[HTTPS代理服务器]
     B -->|直连| C[目标服务器]
     B -->|HTTP| D[目标服务器]
     B -->|SOCKS5| E[目标服务器]
@@ -22,6 +22,6 @@ graph LR
 ```mermaid
 graph LR
     A[客户端] -->|公网| B[HTTPS 代理服务器]
-    B -->|HTTP| C[sing-box]
-    C -->|HTTP| D[目标服务器]
+    B -->|内网| C[HTTP sing-box]
+    C -->|公网| D[HTTP/HTTPS 目标服务器]
 ```
