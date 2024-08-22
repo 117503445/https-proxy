@@ -187,12 +187,6 @@ func handleHTTPSConnection(clientConn net.Conn) {
 		return
 	}
 
-	// serverConn, err := net.Dial("tcp", host)
-	// if err != nil {
-	// 	log.Warn().Err(err).Str("host", host).Msg("Error connecting to target server")
-	// 	return
-	// }
-	// defer serverConn.Close()
 	serverConn, err := outBound.ServerConn(host)
 	if err != nil {
 		log.Warn().Err(err).Str("host", host).Msg("Error connecting to target server")
@@ -200,7 +194,6 @@ func handleHTTPSConnection(clientConn net.Conn) {
 	}
 	defer serverConn.Close()
 
-	// 使用 goroutine 进行双向数据转发
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -240,8 +233,8 @@ func isValidAuth(authHeader string) bool {
 var cli struct {
 	Config []string `short:"c" help:"Config files." type:"path" default:"config.toml" env:"CONFIG"`
 
-	Cert     string `help:"Path to the certificate." type:"path" required:"true" default:"server.crt" env:"CERT"`
-	Key      string `help:"Path to the private key." type:"path" required:"true" default:"server.key" env:"KEY"`
+	Cert     string `help:"Path to the certificate." type:"path" required:"true" default:"cert.pem" env:"CERT"`
+	Key      string `help:"Path to the private key." type:"path" required:"true" default:"key.pem" env:"KEY"`
 	Port     int    `help:"Port to listen on." default:"443" env:"PORT"`
 	Username string `help:"Username for proxy authentication." env:"USERNAME"`
 	Password string `help:"Password for proxy authentication." env:"PASSWORD"`

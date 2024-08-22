@@ -25,3 +25,32 @@ graph LR
     B -->|内网| C[HTTP sing-box]
     C -->|公网| D[HTTP/HTTPS 目标服务器]
 ```
+
+## 部署
+
+### 二进制
+
+下载最新版本二进制 TODO
+
+将 TLS 证书文件 `cert.pem` 和私钥文件 `key.pem` 放到当前目录
+
+写入配置文件 `config.toml`
+
+```toml
+port = 443
+username = "root"
+password = "YOU_PASSWORD"
+
+# direct when `outbound` is empty. support http, socks5 protocol.
+outbound = "http://localhost:1080"
+```
+
+运行
+
+```bash
+./https-proxy
+```
+
+### Docker Compose
+
+TODO
