@@ -21,7 +21,7 @@ graph TD
 
 ```mermaid
 graph TD
-    A[客户端]-- 公网 -->|HTTPS| B[代理服务器]
+    A[客户端] -->|公网| B[HTTPS 代理服务器]
     B -->|HTTP| C[sing-box]
     C -->|HTTP| D[目标服务器]
 ```
