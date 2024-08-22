@@ -7,6 +7,7 @@ require (
 	github.com/alecthomas/kong v0.9.0
 	github.com/alecthomas/kong-toml v0.2.0
 	github.com/rs/zerolog v1.33.0
+	golang.org/x/net v0.28.0
 )
 
 require (
