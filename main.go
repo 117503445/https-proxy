@@ -33,10 +33,7 @@ func (d *DirectOutBound) ServerConn(host string) (net.Conn, error) {
 }
 
 type HTTPOutBound struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
+	OutBound *url.URL
 }
 
 func NewHTTPOutBound(outbound string) *HTTPOutBound {
@@ -45,17 +42,13 @@ func NewHTTPOutBound(outbound string) *HTTPOutBound {
 		log.Fatal().Err(err).Msg("Error parsing URL")
 	}
 
-	
-
 	return &HTTPOutBound{
-		Host:     url.Hostname(),
-		Username: url.User.Username(),
-		Password: url.User.Password(),
+		OutBound: url,
 	}
 }
 
 func (h *HTTPOutBound) ServerConn(host string) (net.Conn, error) {
-	conn, err := net.Dial("tcp", fmt.Sprintf("%s:%d", h.Host, h.Port))
+	conn, err := net.Dial("tcp", h.OutBound.Host)
 	if err != nil {
 		return nil, err
 	}
@@ -67,8 +60,8 @@ func (h *HTTPOutBound) ServerConn(host string) (net.Conn, error) {
 		Header: make(http.Header),
 	}
 
-	if h.Username != "" {
-		auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(h.Username+":"+h.Password))
+	if h.OutBound.User != nil {
+		auth := "Basic " + base64.StdEncoding.EncodeToString([]byte(h.OutBound.User.String()))
 		req.Header.Set("Proxy-Authorization", auth)
 	}
 
@@ -92,22 +85,30 @@ func (h *HTTPOutBound) ServerConn(host string) (net.Conn, error) {
 }
 
 type Socks5OutBound struct {
-	Host     string
-	Port     int
-	Username string
-	Password string
+	OutBound *url.URL
 }
 
-func NewSocks5OutBound(host, username, password string) *Socks5OutBound {
+func NewSocks5OutBound(outbound string) *Socks5OutBound {
+	url, err := url.Parse(outbound)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Error parsing URL")
+	}
+
 	return &Socks5OutBound{
-		Host:     host,
-		Username: username,
-		Password: password,
+		OutBound: url,
 	}
 }
 
 func (s *Socks5OutBound) ServerConn(host string) (net.Conn, error) {
-	dialer, err := proxy.SOCKS5("tcp", fmt.Sprintf("%s:%d", s.Host, s.Port), &proxy.Auth{User: s.Username, Password: s.Password}, nil)
+	var auth *proxy.Auth
+	if s.OutBound.User != nil {
+		password, exists := s.OutBound.User.Password()
+		if !exists {
+			return nil, fmt.Errorf("password not provided")
+		}
+		auth = &proxy.Auth{User: s.OutBound.User.Username(), Password: password}
+	}
+	dialer, err := proxy.SOCKS5("tcp", s.OutBound.Host, auth, proxy.Direct)
 	if err != nil {
 		return nil, err
 	}
@@ -122,13 +123,15 @@ func (s *Socks5OutBound) ServerConn(host string) (net.Conn, error) {
 
 func NewOutBound(outBound string) OutBound {
 	if strings.HasPrefix(outBound, "http://") {
+		log.Info().Str("outbound", outBound).Msg("Use http outbound")
 		return NewHTTPOutBound(outBound)
 	} else if strings.HasPrefix(outBound, "socks5://") {
+		log.Info().Str("outbound", outBound).Msg("Use socks5 outbound")
 		return NewSocks5OutBound(outBound)
 	} else {
+		log.Info().Str("outbound", outBound).Msg("Use direct outbound")
 		return &DirectOutBound{}
 	}
-
 }
 
 var (
@@ -243,11 +246,7 @@ var cli struct {
 	Username string `help:"Username for proxy authentication." env:"USERNAME"`
 	Password string `help:"Password for proxy authentication." env:"PASSWORD"`
 
-	OutBoundType     string `help:"OutBound type." enum:"direct,http,socks5" default:"direct" env:"OUTBOUND_TYPE"`
-	OutBoundHost     string `help:"OutBound host." default:"" env:"OUTBOUND_HOST"`
-	OutBoundPort     int    `help:"OutBound port." default:"0" env:"OUTBOUND_PORT"`
-	OutBoundUsername string `help:"OutBound username." default:"" env:"OUTBOUND_USERNAME"`
-	OutBoundPassword string `help:"OutBound password." default:"" env:"OUTBOUND_PASSWORD"`
+	Outbound string `help:"OutBound address. empty for direct, http://host:port for http, socks5://host:port for socks5" default:"" env:"OUTBOUND"`
 }
 
 func main() {
@@ -256,9 +255,7 @@ func main() {
 	kong.Parse(&cli)
 	kong.Parse(&cli, kong.Configuration(kongtoml.Loader, cli.Config...))
 
-	log.Info().Str("cert", cli.Cert).Str("key", cli.Key).Int("port", cli.Port).Str("username", cli.Username).Strs("config", cli.Config).Msg("Load Config")
-
-	// log.Info().Str("outBoundType", cli.OutBoundType).Str("outBoundHost", cli.OutBoundHost).Int("outBoundPort", cli.OutBoundPort).Str("outBoundUsername", cli.OutBoundUsername).Str("outBoundPassword", cli.OutBoundPassword).Msg("Load OutBound Config")
+	log.Info().Str("cert", cli.Cert).Str("key", cli.Key).Int("port", cli.Port).Str("username", cli.Username).Strs("config", cli.Config).Str("outbound", cli.Outbound).Msg("Load Config")
 
 	if cli.Username == "" && cli.Password == "" {
 		log.Info().Msg("No username and password provided, disabling authentication")
@@ -270,31 +267,7 @@ func main() {
 		log.Fatal().Msg("Both username and password must be provided")
 	}
 
-	switch cli.OutBoundType {
-	case "direct":
-		outBound = &DirectOutBound{}
-		log.Info().Msg("Using direct OutBound")
-	case "http":
-		if cli.OutBoundHost == "" {
-			log.Fatal().Msg("OutBound host must be provided")
-		}
-		if cli.OutBoundPort == 0 {
-			log.Fatal().Msg("OutBound port must be provided")
-		}
-		outBound = NewHTTPOutBound(cli.OutBoundHost, cli.OutBoundUsername, cli.OutBoundPassword)
-		log.Info().Msg("Using HTTP OutBound")
-	case "socks5":
-		if cli.OutBoundHost == "" {
-			log.Fatal().Msg("OutBound host must be provided")
-		}
-		if cli.OutBoundPort == 0 {
-			log.Fatal().Msg("OutBound port must be provided")
-		}
-		outBound = NewSocks5OutBound(cli.OutBoundHost, cli.OutBoundUsername, cli.OutBoundPassword)
-		log.Info().Msg("Using SOCKS5 OutBound")
-	default:
-		log.Fatal().Msg("Invalid OutBound type")
-	}
+	outBound = NewOutBound(cli.Outbound)
 
 	cert, err := tls.LoadX509KeyPair(cli.Cert, cli.Key)
 	if err != nil {
