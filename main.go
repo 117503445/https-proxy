@@ -151,6 +151,8 @@ func handleHTTPSConnection(clientConn net.Conn) {
 	}
 
 	request := string(buffer[:n])
+	log.Info().Str("request", request).Msg("Received CONNECT request")
+
 	lines := strings.Split(request, "\r\n")
 	if len(lines) < 1 {
 		log.Warn().Msg("Invalid request")
